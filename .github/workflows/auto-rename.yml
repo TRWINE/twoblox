@@ -1,0 +1,113 @@
+name: Convert Images to PNG and Rename Sequentially
+
+on:
+  push:
+    branches:
+      - main # Change this if your default branch name is different
+
+permissions:
+  contents: write
+
+jobs:
+  rename-files:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches full history to trace original creation/add timestamps
+
+      - name: Install ImageMagick
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
+      - name: Setup Git Configuration
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Convert non-PNG Images to PNG
+        run: |
+          TARGET_DIR="main/assets/textures"
+          if [ ! -d "$TARGET_DIR" ]; then
+            echo "Directory $TARGET_DIR does not exist. Skipping."
+            exit 0
+          fi
+
+          # Find and convert jpg, jpeg, webp, and bmp files
+          find "$TARGET_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.webp" -o -iname "*.bmp" \) | while read -r img; do
+            filename_no_ext="${img%.*}"
+            new_png_path="${filename_no_ext}.png"
+            
+            echo "Converting '$img' to '$new_png_path'..."
+            magick "$img" "$new_png_path"
+            
+            # Remove original file from git tracking and disk
+            git rm -f "$img"
+            # Stage the newly created conversion
+            git add "$new_png_path"
+          done
+
+      - name: Detect, Sort and Rename All PNG Files
+        run: |
+          TARGET_DIR="main/assets/textures"
+          if [ ! -d "$TARGET_DIR" ]; then
+            exit 0
+          fi
+
+          touch file_list.txt
+          
+          # Scan everything currently staged or tracked in the directory ending in .png
+          git ls-files "$TARGET_DIR" | while read -r file; do
+            if [ -f "$file" ] && [[ "$file" =~ \.[pP][nN][gG]$ ]]; then
+              # Extract original add timestamp
+              add_timestamp=$(git log --follow --format=%at -- "$file" | tail -n 1)
+              
+              # If the file is brand new or freshly converted in this run, assign system time
+              if [ -z "$add_timestamp" ]; then
+                add_timestamp=$(date +%s)
+              fi
+              
+              echo "$add_timestamp|$file" >> file_list.txt
+            fi
+          done
+
+          if [ ! -s file_list.txt ]; then
+            echo "No PNG files found to sort."
+            rm file_list.txt
+            exit 0
+          fi
+
+          # Sort files chronologically from oldest to newest
+          sort -n file_list.txt -o file_list.txt
+
+          # Counter starting at 1
+          counter=1
+          
+          while IFS='|' read -r timestamp file; do
+            dirname=$(dirname -- "$file")
+            new_name="${counter}.png"
+            new_path="${dirname}/${new_name}"
+            
+            # If the current file name does not match the clean index number, rename it
+            if [ "$file" != "$new_path" ]; then
+              echo "Renaming '$file' to '$new_path'"
+              git mv "$file" "$new_path"
+            fi
+            
+            counter=$((counter + 1))
+          done < file_list.txt
+          
+          rm file_list.txt
+
+      - name: Commit and Push Changes
+        run: |
+          # If conversions or renames occurred, push changes back to repository
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: convert images to PNG and rename sequentially [skip ci]"
+            git push origin HEAD:${{ github.ref }}
+          else
+            echo "Everything is up to date."
+          fi
