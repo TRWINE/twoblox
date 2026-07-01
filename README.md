@@ -2,6 +2,6 @@
 
 If you found this then congrats! you know where i'm storing online decals and sounds now! <b>do you feel better about yourself.</b>
 
-<img src="assets/textures/1.png">
+<img src="stare.png">
 
 why am i addicted to this image?
