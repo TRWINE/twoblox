@@ -6,4 +6,4 @@ If you found this then congrats! you know where i'm storing online decals and so
 
 why am i addicted to this image?
 
-Anyways... If you want to upload your own stuff, please make sure that decals are PNGs and sounds are OGGs, otherwise the game can't process them.
+Anyways... If you want to upload your own stuff, please make sure that decals are PNGs and sounds are OGGs, and rename them like the other assets which are numbered, otherwise the game can't process them.
